@@ -30,6 +30,7 @@ Boards supported out of the box:
 - [Waveshare ESP32-S3-Touch-AMOLED-2.16](https://www.waveshare.com/esp32-s3-touch-amoled-2.16.htm?&aff_id=149786)
 - [Waveshare ESP32-C6-Touch-AMOLED-2.16](https://www.waveshare.com/esp32-c6-touch-amoled-2.16.htm?&aff_id=149786) 
 - [Waveshare ESP32-S3-Touch-AMOLED-1.8](https://www.waveshare.com/esp32-s3-touch-amoled-1.8.htm?&aff_id=149786)
+- **ESP32-2432S028R "Cheap Yellow Display" (CYD)** — 2.8" 320×240 ILI9341 TFT, widely available on AliExpress/Amazon for ~$10. Build env: `esp32_2432s028r`.
 
 > Please check if a pull request exists for your alternative hardware port before opening a new one, providing QA feedback and testing on the same hardware is more valuable than duplicate pull requests.
 
@@ -50,11 +51,14 @@ The macOS host pieces — Python daemon, LaunchAgent, and flash helper — were 
 ### Flash the firmware
 
 ```bash
-./flash-mac.sh waveshare_amoled_216                       # auto-detects /dev/cu.usbmodem*
-./flash-mac.sh waveshare_amoled_18  /dev/cu.usbmodem1101  # or pass an explicit USB serial port
+./flash-mac.sh waveshare_amoled_216                        # auto-detects /dev/cu.usbmodem*
+./flash-mac.sh waveshare_amoled_18  /dev/cu.usbmodem1101   # or pass an explicit USB serial port
+./flash-mac.sh esp32_2432s028r      /dev/cu.wchusbserial14210  # CYD: CH340 port, not usbmodem
 ```
 
 The board env name is required. Run `./flash-mac.sh` with no args to see the available envs (scraped from `firmware/platformio.ini`).
+
+> **CYD flash note:** The CYD uses a CH340 USB-serial chip instead of native USB-JTAG. To enter flash mode, hold the BOOT button, press and release RESET, then release BOOT. The port shows up as `/dev/cu.wchusbserial*` on macOS.
 
 ### Pair the device
 
@@ -86,9 +90,12 @@ launchctl load -w ~/Library/LaunchAgents/com.user.claude-usage-daemon.plist # st
 ```bash
 ./flash.sh waveshare_amoled_216                  # defaults to /dev/ttyACM0
 ./flash.sh waveshare_amoled_18  /dev/ttyACM1     # or pass an explicit USB serial port
+./flash.sh esp32_2432s028r      /dev/ttyUSB0     # CYD: CH340 port, not ttyACM
 ```
 
 The board env name is required. Run `./flash.sh` with no args to see the available envs (scraped from `firmware/platformio.ini`).
+
+> **CYD flash note:** The CYD uses a CH340 USB-serial chip. To enter flash mode, hold BOOT, press and release RESET, then release BOOT. The port shows up as `/dev/ttyUSB0` on Linux.
 
 ### Pair the device
 
@@ -130,15 +137,33 @@ View logs: `journalctl --user -u claude-usage-daemon -f`
 
 ## Physical buttons
 
-The board has three side buttons. Left and right send HID keys; the middle (PWR) button cycles splash animations and, held for 3 seconds, triggers pairing mode.
+Button layout varies by board. All boards send HID keys over BLE; the available inputs differ.
 
-| Button           | GPIO         | Function                                                       |
-| ---------------- | ------------ | -------------------------------------------------------------- |
-| **Left**         | GPIO 0       | Hold to send Space (Claude Code voice-mode push-to-talk)       |
-| **Middle** (PWR) | AXP2101 PKEY | On splash: cycle animations. Hold 3s + release: pairing mode |
-| **Right**        | GPIO 18      | Press to send Shift+Tab (Claude Code mode toggle)              |
+### Waveshare AMOLED-2.16 (three buttons)
 
-Space and Shift+Tab go out as standard BLE HID keyboard reports, so they trigger in whatever window has focus on the paired host — not just Claude Code.
+| Button           | GPIO         | Function                                                      |
+| ---------------- | ------------ | ------------------------------------------------------------- |
+| **Left**         | GPIO 0       | Hold to send Space (Claude Code voice-mode push-to-talk)      |
+| **Middle** (PWR) | AXP2101 PKEY | On splash: cycle animations. Hold 3s + release: pairing mode  |
+| **Right**        | GPIO 18      | Press to send Shift+Tab (Claude Code mode toggle)             |
+
+### Waveshare AMOLED-1.8 (two buttons + touch)
+
+| Button           | GPIO         | Function                                                      |
+| ---------------- | ------------ | ------------------------------------------------------------- |
+| **BOOT**         | GPIO 0       | Hold to send Space (Claude Code voice-mode push-to-talk)      |
+| **PWR**          | XCA9554 EXIO4| On splash: cycle animations. Hold 3s + release: pairing mode  |
+| **Touch**        | —            | Tap anywhere: toggle splash / usage screen                    |
+
+### CYD — ESP32-2432S028R (one button + resistive touch)
+
+| Input              | GPIO / Source    | Function                                                  |
+| ------------------ | ---------------- | --------------------------------------------------------- |
+| **BOOT**           | GPIO 0           | Hold to send Space (Claude Code voice-mode push-to-talk)  |
+| **Touch**          | XPT2046          | Tap anywhere: toggle splash / usage screen                |
+| **Hamburger menu** | top-right corner | On usage screen: Brightness / Pair Mode                   |
+
+Space and Shift+Tab go out as standard BLE HID keyboard reports, so they trigger in whatever window has focus on the paired host — not just Claude Code. (CYD only sends Space; Shift+Tab requires a second physical button not present on that board.)
 
 ## BLE protocol
 
