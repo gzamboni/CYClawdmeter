@@ -218,6 +218,8 @@ void setup() {
     input_hal_init();
 
     ui_init();
+    ui_set_brightness_cb([]() { brightness_cycle(); });
+    ui_set_pair_mode_cb([]() { ble_clear_bonds(); Serial.println("Menu: pair mode — bonds cleared"); });
     ui_update_ble_status(ble_get_state(), ble_get_device_name(), ble_get_mac_address());
     ui_update_battery(power_hal_battery_pct(), power_hal_is_charging());
     ui_show_screen(SCREEN_SPLASH);

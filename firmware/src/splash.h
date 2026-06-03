@@ -26,3 +26,12 @@ bool splash_is_active(void);
 
 // Root container (so ui.cpp can attach a click event).
 lv_obj_t* splash_get_root(void);
+
+// Grid size (cells per row/column) — exposed so callers can size output buffers.
+#define SPLASH_GRID 20
+
+// Render the current animation frame into an arbitrary RGB565 buffer at the
+// given cell_size (pixels per grid cell).  E.g. cell_size=2 → 40×40 output.
+// Buffer must hold at least (SPLASH_GRID * cell_size)^2 uint16_t entries.
+// Safe to call at any time (frame counter advances via splash_tick).
+void splash_render_small(uint16_t* buf, int cell_size);

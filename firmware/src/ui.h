@@ -8,6 +8,11 @@ enum screen_t {
     SCREEN_COUNT,
 };
 
+// Callbacks injected by main.cpp so ui.cpp doesn't depend on brightness/ble directly.
+typedef void (*ui_action_cb_t)(void);
+void ui_set_brightness_cb(ui_action_cb_t cb);
+void ui_set_pair_mode_cb(ui_action_cb_t cb);
+
 void ui_init(void);
 void ui_update(const UsageData* data);
 void ui_tick_anim(void);

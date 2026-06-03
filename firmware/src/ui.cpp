@@ -14,6 +14,7 @@ LV_FONT_DECLARE(font_styrene_24);
 LV_FONT_DECLARE(font_styrene_20);
 LV_FONT_DECLARE(font_styrene_16);
 LV_FONT_DECLARE(font_styrene_14);
+LV_FONT_DECLARE(font_mono_18);
 LV_FONT_DECLARE(font_mono_32);
 
 // Layout values computed from the active board's geometry. Populated once
@@ -41,6 +42,20 @@ struct Layout {
     const lv_font_t* bt_device_font;
     const lv_font_t* bt_credit_1_font;
     const lv_font_t* bt_credit_2_font;
+
+    // Usage screen fonts & metrics
+    const lv_font_t* usage_title_font;   // "Usage" heading
+    const lv_font_t* usage_pct_font;     // percentage number
+    const lv_font_t* usage_reset_font;   // "Resets in …" line
+    const lv_font_t* usage_pill_font;    // "Current" / "Weekly" pill
+    const lv_font_t* usage_anim_font;    // bottom spinner / status line
+    int16_t          usage_bar_h;        // progress bar thickness
+    int16_t          panel_pad_h;        // panel horizontal padding
+    int16_t          panel_pad_v;        // panel vertical padding
+    uint16_t         logo_scale;         // LV_SCALE_NONE=256 (100%); 128=50%; 0=hide logo
+    bool             anim_ascii_only;    // use ASCII-only spinner (font has no Unicode glyphs)
+    bool             logo_above_title;   // true: logo centred top, title centred below (CYD)
+    int16_t          logo_y_top;         // y-offset for logo when logo_above_title=true
 };
 static Layout L = {};
 
@@ -68,7 +83,19 @@ static void compute_layout(const BoardCaps& c) {
         L.bt_device_font   = &font_styrene_28;
         L.bt_credit_1_font = &font_styrene_24;
         L.bt_credit_2_font = &font_styrene_20;
-    } else {
+        L.usage_title_font = &font_tiempos_56;
+        L.usage_pct_font   = &font_styrene_48;
+        L.usage_reset_font = &font_styrene_28;
+        L.usage_pill_font  = &font_styrene_28;
+        L.usage_anim_font  = &font_mono_32;
+        L.usage_bar_h      = 24;
+        L.panel_pad_h      = 16;
+        L.panel_pad_v      = 12;
+        L.logo_scale       = 256;  // 100%
+        L.anim_ascii_only  = false;
+        L.logo_above_title = false;
+        L.logo_y_top       = 0;
+    } else if (c.height >= 320) {
         // Compact layout — tuned for 368x448 (AMOLED-1.8).
         L.content_y = 85;
         L.usage_panel_h = 130;
@@ -82,6 +109,56 @@ static void compute_layout(const BoardCaps& c) {
         L.bt_device_font   = &font_styrene_20;
         L.bt_credit_1_font = &font_styrene_16;
         L.bt_credit_2_font = &font_styrene_14;
+        L.usage_title_font = &font_tiempos_34;
+        L.usage_pct_font   = &font_styrene_48;
+        L.usage_reset_font = &font_styrene_28;
+        L.usage_pill_font  = &font_styrene_28;
+        L.usage_anim_font  = &font_mono_32;
+        L.usage_bar_h      = 24;
+        L.panel_pad_h      = 16;
+        L.panel_pad_v      = 12;
+        L.logo_scale       = 256;  // 100%
+        L.anim_ascii_only  = false;
+        L.logo_above_title = false;
+        L.logo_y_top       = 0;
+    } else {
+        // Small landscape layout — tuned for 320x240 (CYD / ILI9341).
+        // Pixel budget (h=240):
+        //   mascot x=2 y=2 40x40 → bottom 42  |  title x=48 y=12
+        //   BOTTOM_MID -15 footer (mono_18 ~18px) → top≈207
+        //   available between header and footer: 207-42=165px
+        //   2 panels h=76 + gap=6 → total 158px; padding = (165-158)/2 ≈ 3
+        //   content_y = 42+3 = 45
+        // Inside panel (pad_v=8 → inner_h=60):
+        //   pct   y=0  font_styrene_20 ~20px → bottom 20
+        //   bar   y=28 h=8               → bottom 36  (gap 8px ✓)
+        //   reset y=42 font_styrene_14   → bottom 56  (clearance 4px ✓)
+        L.margin = 10;
+        L.title_y = 12;   // vertically centred beside 40px mascot (mascot centre=22, font~20px)
+        L.content_y = 45;
+        L.usage_panel_h = 76;
+        L.usage_panel_gap = 6;
+        L.usage_bar_y = 30;
+        L.usage_reset_y = 44;
+        L.bt_info_panel_h = 90;
+        L.bt_reset_zone_h = 60;
+        L.bt_title_font    = &font_styrene_20;
+        L.bt_status_font   = &font_styrene_20;
+        L.bt_device_font   = &font_styrene_16;
+        L.bt_credit_1_font = &font_styrene_14;
+        L.bt_credit_2_font = &font_styrene_14;
+        L.usage_title_font = &font_styrene_20;
+        L.usage_pct_font   = &font_styrene_20;
+        L.usage_reset_font = &font_styrene_14;
+        L.usage_pill_font  = &font_styrene_14;
+        L.usage_anim_font  = &font_mono_18;  // has all spinner Unicode glyphs
+        L.usage_bar_h      = 8;
+        L.panel_pad_h      = 8;
+        L.panel_pad_v      = 8;
+        L.logo_scale       = 128;  // 50% → 40x40px, centred above title
+        L.anim_ascii_only  = false;
+        L.logo_above_title = true;
+        L.logo_y_top       = 2;
     }
 
     L.content_w = L.scr_w - 2 * L.margin;
@@ -116,8 +193,17 @@ static lv_obj_t* lbl_anim;      // status line: connection state + whimsical idl
 
 // ---- Battery indicator (shared, on top) ----
 static lv_obj_t* battery_img;
-static lv_obj_t* logo_img;
+static lv_obj_t* logo_img;                         // static logo (large displays)
+static lv_obj_t* logo_canvas = nullptr;            // animated mini canvas (CYD)
+#define LOGO_MINI_CELL 2                           // 2px/cell → 40×40 for 20-cell grid
+static uint16_t  logo_canvas_buf[SPLASH_GRID * LOGO_MINI_CELL * SPLASH_GRID * LOGO_MINI_CELL];
 static lv_image_dsc_t battery_dscs[5];  // empty, low, medium, full, charging
+
+// ---- Hamburger menu (CYD only) ----
+static lv_obj_t* hamburger_btn  = nullptr;
+static lv_obj_t* hamburger_menu = nullptr;
+static ui_action_cb_t s_brightness_cb = nullptr;
+static ui_action_cb_t s_pair_mode_cb  = nullptr;
 
 // ---- Shared ----
 static lv_image_dsc_t logo_dsc;
@@ -200,6 +286,98 @@ static void format_reset_time(int mins, char* buf, size_t len) {
 // Forward decls — callbacks defined near ui_show_screen below
 static void global_click_cb(lv_event_t* e);
 
+// ======== Hamburger menu ========
+
+void ui_set_brightness_cb(ui_action_cb_t cb) { s_brightness_cb = cb; }
+void ui_set_pair_mode_cb(ui_action_cb_t cb)  { s_pair_mode_cb  = cb; }
+
+static void menu_close(void) {
+    if (hamburger_menu) {
+        lv_obj_del(hamburger_menu);
+        hamburger_menu = nullptr;
+    }
+}
+
+static void menu_backdrop_cb(lv_event_t* e) {
+    (void)e;
+    menu_close();
+}
+
+static void menu_brightness_cb(lv_event_t* e) {
+    (void)e;
+    menu_close();
+    if (s_brightness_cb) s_brightness_cb();
+}
+
+static void menu_pair_cb(lv_event_t* e) {
+    (void)e;
+    menu_close();
+    if (s_pair_mode_cb) s_pair_mode_cb();
+}
+
+static void hamburger_open_cb(lv_event_t* e) {
+    (void)e;
+    if (hamburger_menu) { menu_close(); return; }  // toggle
+
+    lv_obj_t* scr = lv_screen_active();
+
+    // Full-screen invisible backdrop to catch outside taps.
+    hamburger_menu = lv_obj_create(scr);
+    lv_obj_set_size(hamburger_menu, L.scr_w, L.scr_h);
+    lv_obj_set_pos(hamburger_menu, 0, 0);
+    lv_obj_set_style_bg_opa(hamburger_menu, LV_OPA_TRANSP, 0);
+    lv_obj_set_style_border_width(hamburger_menu, 0, 0);
+    lv_obj_set_style_pad_all(hamburger_menu, 0, 0);
+    lv_obj_clear_flag(hamburger_menu, LV_OBJ_FLAG_SCROLLABLE);
+    lv_obj_clear_flag(hamburger_menu, LV_OBJ_FLAG_EVENT_BUBBLE);  // don't let backdrop leak to scr
+    lv_obj_add_event_cb(hamburger_menu, menu_backdrop_cb, LV_EVENT_CLICKED, NULL);
+
+    // Menu panel — right-aligned, below the hamburger button.
+    const int MENU_W = 140;
+    const int MENU_ITEM_H = 40;
+    const int MENU_ITEMS = 2;
+    const int MENU_PAD = 8;
+    const int MENU_H = MENU_ITEMS * MENU_ITEM_H + 2 * MENU_PAD;
+    const int MENU_X = L.scr_w - MENU_W - 2;
+    const int MENU_Y = 42;  // just below the 40px hamburger button
+
+    lv_obj_t* panel = lv_obj_create(hamburger_menu);
+    lv_obj_set_pos(panel, MENU_X, MENU_Y);
+    lv_obj_set_size(panel, MENU_W, MENU_H);
+    lv_obj_set_style_bg_color(panel, COL_PANEL, 0);
+    lv_obj_set_style_bg_opa(panel, LV_OPA_COVER, 0);
+    lv_obj_set_style_radius(panel, 8, 0);
+    lv_obj_set_style_border_width(panel, 0, 0);
+    lv_obj_set_style_pad_all(panel, MENU_PAD, 0);
+    lv_obj_clear_flag(panel, LV_OBJ_FLAG_SCROLLABLE);
+    // Prevent clicks on the panel from bubbling to the backdrop.
+    lv_obj_clear_flag(panel, LV_OBJ_FLAG_EVENT_BUBBLE);
+
+    auto make_item = [&](int idx, const char* text, lv_event_cb_t cb) {
+        lv_obj_t* btn = lv_obj_create(panel);
+        lv_obj_set_pos(btn, 0, idx * MENU_ITEM_H);
+        lv_obj_set_size(btn, MENU_W - 2 * MENU_PAD, MENU_ITEM_H - 2);
+        lv_obj_set_style_bg_color(btn, COL_PANEL, 0);
+        lv_obj_set_style_bg_opa(btn, LV_OPA_COVER, 0);
+        lv_obj_set_style_bg_color(btn, COL_BAR_BG, LV_STATE_PRESSED);
+        lv_obj_set_style_radius(btn, 6, 0);
+        lv_obj_set_style_border_width(btn, 0, 0);
+        lv_obj_set_style_pad_all(btn, 0, 0);
+        lv_obj_clear_flag(btn, LV_OBJ_FLAG_SCROLLABLE);
+        lv_obj_clear_flag(btn, LV_OBJ_FLAG_EVENT_BUBBLE);
+        lv_obj_add_event_cb(btn, cb, LV_EVENT_CLICKED, NULL);
+
+        lv_obj_t* lbl = lv_label_create(btn);
+        lv_label_set_text(lbl, text);
+        lv_obj_set_style_text_font(lbl, L.usage_pill_font, 0);
+        lv_obj_set_style_text_color(lbl, COL_TEXT, 0);
+        lv_obj_center(lbl);
+    };
+
+    make_item(0, "Brightness", menu_brightness_cb);
+    make_item(1, "Pair Mode",  menu_pair_cb);
+}
+
 static lv_obj_t* make_panel(lv_obj_t* parent, int x, int y, int w, int h) {
     lv_obj_t* panel = lv_obj_create(parent);
     lv_obj_set_pos(panel, x, y);
@@ -208,10 +386,10 @@ static lv_obj_t* make_panel(lv_obj_t* parent, int x, int y, int w, int h) {
     lv_obj_set_style_bg_opa(panel, LV_OPA_COVER, 0);
     lv_obj_set_style_radius(panel, 8, 0);
     lv_obj_set_style_border_width(panel, 0, 0);
-    lv_obj_set_style_pad_left(panel, 16, 0);
-    lv_obj_set_style_pad_right(panel, 16, 0);
-    lv_obj_set_style_pad_top(panel, 12, 0);
-    lv_obj_set_style_pad_bottom(panel, 12, 0);
+    lv_obj_set_style_pad_left(panel, L.panel_pad_h, 0);
+    lv_obj_set_style_pad_right(panel, L.panel_pad_h, 0);
+    lv_obj_set_style_pad_top(panel, L.panel_pad_v, 0);
+    lv_obj_set_style_pad_bottom(panel, L.panel_pad_v, 0);
     lv_obj_clear_flag(panel, LV_OBJ_FLAG_SCROLLABLE);
     lv_obj_add_flag(panel, LV_OBJ_FLAG_EVENT_BUBBLE);
     return panel;
@@ -244,7 +422,7 @@ static void init_icon_dsc_rgb565a8(lv_image_dsc_t* dsc, int w, int h, const uint
 static lv_obj_t* make_pill(lv_obj_t* parent, const char* text) {
     lv_obj_t* lbl = lv_label_create(parent);
     lv_label_set_text(lbl, text);
-    lv_obj_set_style_text_font(lbl, &font_styrene_28, 0);
+    lv_obj_set_style_text_font(lbl, L.usage_pill_font, 0);
     lv_obj_set_style_text_color(lbl, COL_TEXT, 0);
     lv_obj_set_style_bg_color(lbl, COL_BAR_BG, 0);
     lv_obj_set_style_bg_opa(lbl, LV_OPA_COVER, 0);
@@ -273,18 +451,21 @@ static void make_usage_panel(lv_obj_t* parent, int y, const char* pill_text,
 
     *out_pct = lv_label_create(panel);
     lv_label_set_text(*out_pct, "---%");
-    lv_obj_set_style_text_font(*out_pct, &font_styrene_48, 0);
+    lv_obj_set_style_text_font(*out_pct, L.usage_pct_font, 0);
     lv_obj_set_style_text_color(*out_pct, COL_TEXT, 0);
     lv_obj_set_pos(*out_pct, 0, 0);
 
     *out_pill = make_pill(panel, pill_text);
     lv_obj_align(*out_pill, LV_ALIGN_TOP_RIGHT, 0, 1);
 
-    *out_bar = make_bar(panel, 0, L.usage_bar_y, L.content_w - 32, 24);
+    // Bar: full content width minus pill area, centered horizontally.
+    int bar_w = L.content_w - 2 * L.panel_pad_h;
+    int bar_x = 0;  // relative to panel's padded content area (already offset by pad)
+    *out_bar = make_bar(panel, bar_x, L.usage_bar_y, bar_w, L.usage_bar_h);
 
     *out_reset = lv_label_create(panel);
     lv_label_set_text(*out_reset, "---");
-    lv_obj_set_style_text_font(*out_reset, &font_styrene_28, 0);
+    lv_obj_set_style_text_font(*out_reset, L.usage_reset_font, 0);
     lv_obj_set_style_text_color(*out_reset, COL_DIM, 0);
     lv_obj_set_pos(*out_reset, 0, L.usage_reset_y);
 }
@@ -333,10 +514,17 @@ static void init_usage_screen(lv_obj_t* scr) {
     lv_obj_add_event_cb(usage_container, global_click_cb, LV_EVENT_CLICKED, NULL);
 
     lbl_title = lv_label_create(usage_container);
-    lv_label_set_text(lbl_title, "Usage");
-    lv_obj_set_style_text_font(lbl_title, &font_tiempos_56, 0);
+    lv_label_set_text(lbl_title, "Claude Usage");
+    lv_obj_set_style_text_font(lbl_title, L.usage_title_font, 0);
     lv_obj_set_style_text_color(lbl_title, COL_TEXT, 0);
-    lv_obj_align(lbl_title, LV_ALIGN_TOP_MID, 16, L.title_y);
+    // logo_above_title: mascot is top-left, title sits to its right, vertically centred.
+    // Otherwise (large displays) title is centred on screen.
+    if (L.logo_above_title) {
+        int mascot_w = SPLASH_GRID * LOGO_MINI_CELL;  // 20*2=40px
+        lv_obj_align(lbl_title, LV_ALIGN_TOP_LEFT, 2 + mascot_w + 6, L.title_y);
+    } else {
+        lv_obj_align(lbl_title, LV_ALIGN_TOP_MID, 0, L.title_y);
+    }
 
     // Usage panels (shown when connected) live in a transparent full-size group
     // so they can be toggled against the pairing hint as one unit.
@@ -362,7 +550,7 @@ static void init_usage_screen(lv_obj_t* scr) {
     // Status line — always visible on the usage view. Driven by ui_tick_anim().
     lbl_anim = lv_label_create(usage_container);
     lv_label_set_text(lbl_anim, "");
-    lv_obj_set_style_text_font(lbl_anim, &font_mono_32, 0);
+    lv_obj_set_style_text_font(lbl_anim, L.usage_anim_font, 0);
     lv_obj_set_style_text_color(lbl_anim, COL_ACCENT, 0);
     lv_obj_align(lbl_anim, LV_ALIGN_BOTTOM_MID, 0, -15);
 }
@@ -386,13 +574,59 @@ void ui_init(void) {
         lv_obj_add_event_cb(splash_get_root(), global_click_cb, LV_EVENT_CLICKED, NULL);
     }
 
-    logo_img = lv_image_create(scr);
-    lv_image_set_src(logo_img, &logo_dsc);
-    lv_obj_set_pos(logo_img, L.margin, L.title_y - 10);
+    if (L.logo_above_title) {
+        // CYD: replace static logo with an animated 40×40 canvas.
+        logo_canvas = lv_canvas_create(scr);
+        lv_canvas_set_buffer(logo_canvas, logo_canvas_buf,
+                             SPLASH_GRID * LOGO_MINI_CELL, SPLASH_GRID * LOGO_MINI_CELL,
+                             LV_COLOR_FORMAT_RGB565);
+        lv_obj_set_pos(logo_canvas, 2, L.logo_y_top);
+        splash_render_small(logo_canvas_buf, LOGO_MINI_CELL);
+        lv_obj_invalidate(logo_canvas);
+    } else if (L.logo_scale > 0) {
+        logo_img = lv_image_create(scr);
+        lv_image_set_src(logo_img, &logo_dsc);
+        lv_image_set_scale(logo_img, L.logo_scale);
+        lv_obj_set_pos(logo_img, L.margin, L.title_y - (L.logo_scale == 256 ? 10 : 6));
+    }
 
-    battery_img = lv_image_create(scr);
-    lv_image_set_src(battery_img, &battery_dscs[0]);
-    lv_obj_set_pos(battery_img, L.scr_w - 48 - L.margin, L.title_y);
+    if (board_caps().has_battery) {
+        battery_img = lv_image_create(scr);
+        lv_image_set_src(battery_img, &battery_dscs[0]);
+        lv_obj_set_pos(battery_img, L.scr_w - 48 - L.margin, L.title_y);
+    }
+
+    // Hamburger menu button — CYD only (top-right corner, 40×40).
+    if (L.logo_above_title) {
+        hamburger_btn = lv_obj_create(scr);
+        lv_obj_set_size(hamburger_btn, 40, 40);
+        lv_obj_set_pos(hamburger_btn, L.scr_w - 42, 2);
+        lv_obj_set_style_bg_color(hamburger_btn, COL_PANEL, 0);
+        lv_obj_set_style_bg_opa(hamburger_btn, LV_OPA_COVER, 0);
+        lv_obj_set_style_bg_color(hamburger_btn, COL_BAR_BG, LV_STATE_PRESSED);
+        lv_obj_set_style_radius(hamburger_btn, 6, 0);
+        lv_obj_set_style_border_width(hamburger_btn, 0, 0);
+        lv_obj_set_style_pad_all(hamburger_btn, 0, 0);
+        lv_obj_clear_flag(hamburger_btn, LV_OBJ_FLAG_SCROLLABLE);
+        lv_obj_clear_flag(hamburger_btn, LV_OBJ_FLAG_EVENT_BUBBLE);
+        // Expand touch hit area by 12px on every side to compensate for
+        // XPT2046 resistive panel inaccuracy on the CYD.
+        lv_obj_set_ext_click_area(hamburger_btn, 12);
+        lv_obj_add_event_cb(hamburger_btn, hamburger_open_cb, LV_EVENT_CLICKED, NULL);
+
+        // Three horizontal lines drawn as thin rectangles — no font dependency.
+        for (int i = 0; i < 3; i++) {
+            lv_obj_t* line = lv_obj_create(hamburger_btn);
+            lv_obj_set_size(line, 22, 2);
+            lv_obj_set_pos(line, 9, 12 + i * 8);
+            lv_obj_set_style_bg_color(line, COL_TEXT, 0);
+            lv_obj_set_style_bg_opa(line, LV_OPA_COVER, 0);
+            lv_obj_set_style_border_width(line, 0, 0);
+            lv_obj_set_style_radius(line, 1, 0);
+            lv_obj_set_style_pad_all(line, 0, 0);
+            lv_obj_clear_flag(line, LV_OBJ_FLAG_CLICKABLE);
+        }
+    }
 }
 
 void ui_update(const UsageData* data) {
@@ -420,6 +654,12 @@ void ui_update(const UsageData* data) {
 void ui_tick_anim(void) {
     if (current_screen != SCREEN_USAGE) return;
 
+    // Keep the mini logo canvas in sync with whichever frame splash_tick advanced.
+    if (logo_canvas) {
+        splash_render_small(logo_canvas_buf, LOGO_MINI_CELL);
+        lv_obj_invalidate(logo_canvas);
+    }
+
     uint32_t now = lv_tick_get();
 
     if (now - anim_msg_start >= ANIM_MSG_MS) {
@@ -444,9 +684,15 @@ void ui_tick_anim(void) {
     }
 
     // All states share the whimsical style: "<glyph> <Title-case word>…"
+    // ASCII-only fallback for fonts that only cover 0x20-0x7E (e.g. styrene_14).
+    static const char* const spinner_frames_ascii[] = {
+        "-", "/", "|", "\\", "|", "/",
+    };
+    const char* const* frames = L.anim_ascii_only ? spinner_frames_ascii : spinner_frames;
+    const char* ellipsis = L.anim_ascii_only ? "..." : "\xE2\x80\xA6";
     static char buf[80];
-    snprintf(buf, sizeof(buf), "%s %s\xE2\x80\xA6",
-             spinner_frames[anim_spinner_idx], text);
+    snprintf(buf, sizeof(buf), "%s %s%s",
+             frames[anim_spinner_idx], text, ellipsis);
     lv_label_set_text(lbl_anim, buf);
 }
 
@@ -459,6 +705,28 @@ static void apply_battery_visibility(void) {
 
 static void global_click_cb(lv_event_t* e) {
     (void)e;
+    if (hamburger_menu) return;
+
+    // If the tap landed inside (or near) the hamburger button, silently drop it.
+    if (hamburger_btn && !lv_obj_has_flag(hamburger_btn, LV_OBJ_FLAG_HIDDEN)) {
+        lv_indev_t* indev = lv_indev_active();
+        if (indev) {
+            lv_point_t pt;
+            lv_indev_get_point(indev, &pt);
+            lv_area_t coords;
+            lv_obj_get_coords(hamburger_btn, &coords);
+            const int32_t M = 12;
+            if (pt.x >= coords.x1 - M && pt.x <= coords.x2 + M &&
+                pt.y >= coords.y1 - M && pt.y <= coords.y2 + M) return;
+        }
+    }
+
+    // Debounce: ignore taps closer than 600 ms apart.
+    static uint32_t last_toggle_ms = 0;
+    uint32_t now = lv_tick_get();
+    if (now - last_toggle_ms < 600) return;
+    last_toggle_ms = now;
+
     if (current_screen == SCREEN_SPLASH) ui_show_screen(prev_non_splash_screen);
     else                                  ui_show_screen(SCREEN_SPLASH);
 }
@@ -477,6 +745,17 @@ void ui_show_screen(screen_t screen) {
         if (screen == SCREEN_SPLASH) lv_obj_add_flag(logo_img, LV_OBJ_FLAG_HIDDEN);
         else                          lv_obj_clear_flag(logo_img, LV_OBJ_FLAG_HIDDEN);
     }
+    if (logo_canvas) {
+        if (screen == SCREEN_SPLASH) lv_obj_add_flag(logo_canvas, LV_OBJ_FLAG_HIDDEN);
+        else                          lv_obj_clear_flag(logo_canvas, LV_OBJ_FLAG_HIDDEN);
+    }
+    if (hamburger_btn) {
+        // Hamburger only belongs to the usage dashboard, never the splash.
+        if (screen == SCREEN_SPLASH) lv_obj_add_flag(hamburger_btn, LV_OBJ_FLAG_HIDDEN);
+        else                          lv_obj_clear_flag(hamburger_btn, LV_OBJ_FLAG_HIDDEN);
+    }
+    // Close any open menu when changing screens.
+    if (hamburger_menu) menu_close();
 
     if (screen != SCREEN_SPLASH) prev_non_splash_screen = screen;
     current_screen = screen;
@@ -527,6 +806,6 @@ void ui_update_battery(int percent, bool charging) {
     } else {
         idx = 3;
     }
-    lv_image_set_src(battery_img, &battery_dscs[idx]);
+    if (battery_img) lv_image_set_src(battery_img, &battery_dscs[idx]);
     apply_battery_visibility();
 }

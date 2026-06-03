@@ -166,10 +166,10 @@ void splash_init(lv_obj_t *parent) {
 }
 
 void splash_tick(void) {
-    if (!active || SPLASH_ANIM_COUNT == 0) return;
+    if (SPLASH_ANIM_COUNT == 0) return;
 
-    // Auto-rotate to the next animation in the current group.
-    if (millis() - last_pick_ms >= SPLASH_ROTATE_INTERVAL_MS) {
+    // Auto-rotate (only while splash is showing).
+    if (active && millis() - last_pick_ms >= SPLASH_ROTATE_INTERVAL_MS) {
         splash_pick_for_current_rate();
     }
 
@@ -180,7 +180,31 @@ void splash_tick(void) {
     if (millis() - frame_started_ms >= hold) {
         cur_frame = (cur_frame + 1) % a->frame_count;
         frame_started_ms = millis();
-        render_frame(a->frames[cur_frame], a->palette);
+        // Only blit to the full-screen canvas when splash is visible.
+        if (active) render_frame(a->frames[cur_frame], a->palette);
+    }
+}
+
+void splash_render_small(uint16_t* buf, int cell_size) {
+    if (SPLASH_ANIM_COUNT == 0) {
+        int total = GRID * cell_size * GRID * cell_size;
+        for (int i = 0; i < total; i++) buf[i] = 0x0000;
+        return;
+    }
+    const splash_anim_def_t* a = &splash_anims[cur_anim];
+    const uint8_t*  cells   = a->frames[cur_frame];
+    const uint16_t* palette = a->palette;
+    int w = GRID * cell_size;
+    for (int gy = 0; gy < GRID; gy++) {
+        for (int gx = 0; gx < GRID; gx++) {
+            uint8_t  code  = cells[gy * GRID + gx];
+            uint16_t color = (palette && code < SPLASH_PALETTE_SIZE) ? palette[code] : 0x0000;
+            for (int dy = 0; dy < cell_size; dy++) {
+                for (int dx = 0; dx < cell_size; dx++) {
+                    buf[(gy * cell_size + dy) * w + (gx * cell_size + dx)] = color;
+                }
+            }
+        }
     }
 }
 
