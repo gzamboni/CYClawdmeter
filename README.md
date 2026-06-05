@@ -18,10 +18,10 @@ The Clawd animations come from [claudepix](https://claudepix.vercel.app), [@amaa
 
 The device boots into the splash. Tap the screen anywhere to switch to the Usage view; tap again to flip back to the splash.
 
-|              Splash               |              Usage              |
-| :-------------------------------: | :-----------------------------: |
-| ![Splash](screenshots/splash.png) | ![Usage](screenshots/usage.png) |
-|   Splash; touch-toggle anytime    | Session and weekly utilization  |
+|              Splash               |              Usage              |              Menu              |
+| :-------------------------------: | :-----------------------------: | :----------------------------: |
+| ![Splash](screenshots/splash.png) | ![Usage](screenshots/usage.png) | ![Menu](screenshots/menu.png) |
+|   Splash; touch-toggle anytime    | Session and weekly utilization  | Brightness and pairing sidebar |
 
 The firmware also auto-rotates animations every 20 s within the current usage-rate group, so a long stretch on the splash isn't just one Clawd on loop. The display fades to black after 30 minutes of inactivity and wakes on any button press, touch, **or when new token-usage data arrives over BLE that differs from the last seen values**.
 
@@ -153,9 +153,18 @@ This relies on LVGL internal/private rendering APIs and `LV_USE_SNAPSHOT=1`, so 
 | ------------------ | ---------------- | --------------------------------------------------------- |
 | **BOOT**           | GPIO 0           | Hold to send Space (Claude Code voice-mode push-to-talk)  |
 | **Touch**          | XPT2046          | Tap anywhere: toggle splash / usage screen                |
-| **Hamburger menu** | top-right corner | On usage screen: Brightness / Pair Mode                   |
+| **Hamburger menu** | top-right corner | On usage screen: open the settings sidebar                |
 
 Space goes out as a standard BLE HID keyboard report, so it triggers in whatever window has focus on the paired host — not just Claude Code. (The CYD has no secondary button, so the Shift+Tab mode-toggle shortcut available on multi-button boards is not bound here.)
+
+## Hamburger menu
+
+On the Usage screen, tap the top-right hamburger button to open the right-side settings sidebar.
+
+- **Brightness** — a live `0..255` slider for the CYD backlight PWM. `0` turns the backlight off; `255` is full brightness. Dragging applies brightness immediately, and the final value is saved when you release the slider.
+- **Pair Bluetooth** — clears the saved BLE bond and starts advertising again, so the device can be paired with a host from scratch.
+
+Tap outside the sidebar, or tap the hamburger button again, to close the menu.
 
 ## BLE protocol
 
