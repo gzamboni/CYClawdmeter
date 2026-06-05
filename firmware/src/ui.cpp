@@ -203,7 +203,9 @@ static lv_image_dsc_t battery_dscs[5];  // empty, low, medium, full, charging
 // ---- Hamburger menu (CYD only) ----
 static lv_obj_t* hamburger_btn  = nullptr;
 static lv_obj_t* hamburger_menu = nullptr;
-static ui_action_cb_t s_brightness_cb = nullptr;
+static ui_brightness_set_cb_t s_brightness_apply_cb = nullptr;
+static ui_brightness_set_cb_t s_brightness_save_cb = nullptr;
+static ui_brightness_get_cb_t s_brightness_get_cb = nullptr;
 static ui_action_cb_t s_pair_mode_cb  = nullptr;
 
 // ---- Shared ----
@@ -289,7 +291,13 @@ static void global_click_cb(lv_event_t* e);
 
 // ======== Hamburger menu ========
 
-void ui_set_brightness_cb(ui_action_cb_t cb) { s_brightness_cb = cb; }
+void ui_set_brightness_cbs(ui_brightness_set_cb_t apply_cb,
+                           ui_brightness_set_cb_t save_cb,
+                           ui_brightness_get_cb_t get_cb) {
+    s_brightness_apply_cb = apply_cb;
+    s_brightness_save_cb = save_cb;
+    s_brightness_get_cb = get_cb;
+}
 void ui_set_pair_mode_cb(ui_action_cb_t cb)  { s_pair_mode_cb  = cb; }
 
 static void menu_close(void) {
@@ -304,16 +312,41 @@ static void menu_backdrop_cb(lv_event_t* e) {
     menu_close();
 }
 
-static void menu_brightness_cb(lv_event_t* e) {
-    (void)e;
-    menu_close();
-    if (s_brightness_cb) s_brightness_cb();
+static void menu_brightness_slider_cb(lv_event_t* e) {
+    lv_obj_t* slider = (lv_obj_t*)lv_event_get_target(e);
+    int32_t value = lv_slider_get_value(slider);
+    if (value < 0) value = 0;
+    if (value > 255) value = 255;
+
+    lv_obj_t* value_lbl = (lv_obj_t*)lv_event_get_user_data(e);
+    if (value_lbl) {
+        lv_label_set_text_fmt(value_lbl, "%ld", (long)value);
+    }
+    if (s_brightness_apply_cb) s_brightness_apply_cb((uint8_t)value);
+}
+
+static void menu_brightness_save_cb(lv_event_t* e) {
+    lv_obj_t* slider = (lv_obj_t*)lv_event_get_target(e);
+    int32_t value = lv_slider_get_value(slider);
+    if (value < 0) value = 0;
+    if (value > 255) value = 255;
+    if (s_brightness_save_cb) s_brightness_save_cb((uint8_t)value);
 }
 
 static void menu_pair_cb(lv_event_t* e) {
     (void)e;
     menu_close();
     if (s_pair_mode_cb) s_pair_mode_cb();
+}
+
+static lv_obj_t* make_sidebar_label(lv_obj_t* parent, const char* text, int x, int y,
+                                    const lv_font_t* font, lv_color_t color) {
+    lv_obj_t* lbl = lv_label_create(parent);
+    lv_label_set_text(lbl, text);
+    lv_obj_set_style_text_font(lbl, font, 0);
+    lv_obj_set_style_text_color(lbl, color, 0);
+    lv_obj_set_pos(lbl, x, y);
+    return lbl;
 }
 
 static void hamburger_open_cb(lv_event_t* e) {
@@ -333,50 +366,66 @@ static void hamburger_open_cb(lv_event_t* e) {
     lv_obj_clear_flag(hamburger_menu, LV_OBJ_FLAG_EVENT_BUBBLE);  // don't let backdrop leak to scr
     lv_obj_add_event_cb(hamburger_menu, menu_backdrop_cb, LV_EVENT_CLICKED, NULL);
 
-    // Menu panel — right-aligned, below the hamburger button.
-    const int MENU_W = 140;
-    const int MENU_ITEM_H = 40;
-    const int MENU_ITEMS = 2;
-    const int MENU_PAD = 8;
-    const int MENU_H = MENU_ITEMS * MENU_ITEM_H + 2 * MENU_PAD;
-    const int MENU_X = L.scr_w - MENU_W - 2;
-    const int MENU_Y = 42;  // just below the 40px hamburger button
+    // Sidebar panel — right-aligned and tall enough for touch-friendly controls.
+    const int PANEL_W = 188;
+    const int PANEL_X = L.scr_w - PANEL_W;
+    const int PANEL_H = L.scr_h;
+    const int PAD = 14;
 
     lv_obj_t* panel = lv_obj_create(hamburger_menu);
-    lv_obj_set_pos(panel, MENU_X, MENU_Y);
-    lv_obj_set_size(panel, MENU_W, MENU_H);
+    lv_obj_set_pos(panel, PANEL_X, 0);
+    lv_obj_set_size(panel, PANEL_W, PANEL_H);
     lv_obj_set_style_bg_color(panel, COL_PANEL, 0);
     lv_obj_set_style_bg_opa(panel, LV_OPA_COVER, 0);
-    lv_obj_set_style_radius(panel, 8, 0);
+    lv_obj_set_style_radius(panel, 0, 0);
     lv_obj_set_style_border_width(panel, 0, 0);
-    lv_obj_set_style_pad_all(panel, MENU_PAD, 0);
+    lv_obj_set_style_pad_all(panel, 0, 0);
     lv_obj_clear_flag(panel, LV_OBJ_FLAG_SCROLLABLE);
     // Prevent clicks on the panel from bubbling to the backdrop.
     lv_obj_clear_flag(panel, LV_OBJ_FLAG_EVENT_BUBBLE);
 
-    auto make_item = [&](int idx, const char* text, lv_event_cb_t cb) {
-        lv_obj_t* btn = lv_obj_create(panel);
-        lv_obj_set_pos(btn, 0, idx * MENU_ITEM_H);
-        lv_obj_set_size(btn, MENU_W - 2 * MENU_PAD, MENU_ITEM_H - 2);
-        lv_obj_set_style_bg_color(btn, COL_PANEL, 0);
-        lv_obj_set_style_bg_opa(btn, LV_OPA_COVER, 0);
-        lv_obj_set_style_bg_color(btn, COL_BAR_BG, LV_STATE_PRESSED);
-        lv_obj_set_style_radius(btn, 6, 0);
-        lv_obj_set_style_border_width(btn, 0, 0);
-        lv_obj_set_style_pad_all(btn, 0, 0);
-        lv_obj_clear_flag(btn, LV_OBJ_FLAG_SCROLLABLE);
-        lv_obj_clear_flag(btn, LV_OBJ_FLAG_EVENT_BUBBLE);
-        lv_obj_add_event_cb(btn, cb, LV_EVENT_CLICKED, NULL);
+    make_sidebar_label(panel, "Menu", PAD, 14, &font_styrene_20, COL_TEXT);
+    make_sidebar_label(panel, "Brightness", PAD, 58, L.usage_pill_font, COL_DIM);
 
-        lv_obj_t* lbl = lv_label_create(btn);
-        lv_label_set_text(lbl, text);
-        lv_obj_set_style_text_font(lbl, L.usage_pill_font, 0);
-        lv_obj_set_style_text_color(lbl, COL_TEXT, 0);
-        lv_obj_center(lbl);
-    };
+    uint8_t brightness = s_brightness_get_cb ? s_brightness_get_cb() : 255;
+    lv_obj_t* value_lbl = make_sidebar_label(panel, "", PANEL_W - 48, 58, L.usage_pill_font, COL_ACCENT);
+    lv_label_set_text_fmt(value_lbl, "%u", brightness);
 
-    make_item(0, "Brightness", menu_brightness_cb);
-    make_item(1, "Pair Mode",  menu_pair_cb);
+    lv_obj_t* slider = lv_slider_create(panel);
+    lv_obj_set_size(slider, PANEL_W - 2 * PAD, 24);
+    lv_obj_set_pos(slider, PAD, 88);
+    lv_slider_set_range(slider, 0, 255);
+    lv_slider_set_value(slider, brightness, LV_ANIM_OFF);
+    lv_obj_set_style_bg_color(slider, COL_BAR_BG, LV_PART_MAIN);
+    lv_obj_set_style_bg_opa(slider, LV_OPA_COVER, LV_PART_MAIN);
+    lv_obj_set_style_bg_color(slider, COL_ACCENT, LV_PART_INDICATOR);
+    lv_obj_set_style_bg_opa(slider, LV_OPA_COVER, LV_PART_INDICATOR);
+    lv_obj_set_style_bg_color(slider, COL_TEXT, LV_PART_KNOB);
+    lv_obj_set_style_bg_opa(slider, LV_OPA_COVER, LV_PART_KNOB);
+    lv_obj_set_style_radius(slider, 6, LV_PART_MAIN);
+    lv_obj_set_style_radius(slider, 6, LV_PART_INDICATOR);
+    lv_obj_set_style_radius(slider, 8, LV_PART_KNOB);
+    lv_obj_add_event_cb(slider, menu_brightness_slider_cb, LV_EVENT_VALUE_CHANGED, value_lbl);
+    lv_obj_add_event_cb(slider, menu_brightness_save_cb, LV_EVENT_RELEASED, NULL);
+
+    lv_obj_t* pair_btn = lv_obj_create(panel);
+    lv_obj_set_pos(pair_btn, PAD, 144);
+    lv_obj_set_size(pair_btn, PANEL_W - 2 * PAD, 42);
+    lv_obj_set_style_bg_color(pair_btn, COL_BAR_BG, 0);
+    lv_obj_set_style_bg_opa(pair_btn, LV_OPA_COVER, 0);
+    lv_obj_set_style_bg_color(pair_btn, COL_ACCENT, LV_STATE_PRESSED);
+    lv_obj_set_style_radius(pair_btn, 6, 0);
+    lv_obj_set_style_border_width(pair_btn, 0, 0);
+    lv_obj_set_style_pad_all(pair_btn, 0, 0);
+    lv_obj_clear_flag(pair_btn, LV_OBJ_FLAG_SCROLLABLE);
+    lv_obj_clear_flag(pair_btn, LV_OBJ_FLAG_EVENT_BUBBLE);
+    lv_obj_add_event_cb(pair_btn, menu_pair_cb, LV_EVENT_CLICKED, NULL);
+
+    lv_obj_t* pair_lbl = lv_label_create(pair_btn);
+    lv_label_set_text(pair_lbl, "Pair Bluetooth");
+    lv_obj_set_style_text_font(pair_lbl, L.usage_pill_font, 0);
+    lv_obj_set_style_text_color(pair_lbl, COL_TEXT, 0);
+    lv_obj_center(pair_lbl);
 }
 
 static lv_obj_t* make_panel(lv_obj_t* parent, int x, int y, int w, int h) {

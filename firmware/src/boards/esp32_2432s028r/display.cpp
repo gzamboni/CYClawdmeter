@@ -6,9 +6,8 @@
 static Arduino_DataBus* bus = nullptr;
 static Arduino_ILI9341* gfx = nullptr;
 
-static bool level_to_on(uint8_t level) {
-    return level > 0;
-}
+#define BACKLIGHT_PWM_FREQ_HZ 5000
+#define BACKLIGHT_PWM_BITS    8
 
 void display_hal_init(void) {
     bus = new Arduino_ESP32SPI(
@@ -20,11 +19,12 @@ void display_hal_init(void) {
 void display_hal_begin(void) {
     gfx->begin();
     gfx->fillScreen(0x0000);
-    digitalWrite(LCD_BL, HIGH);
+    ledcAttach(LCD_BL, BACKLIGHT_PWM_FREQ_HZ, BACKLIGHT_PWM_BITS);
+    display_hal_set_brightness(255);
 }
 
 void display_hal_set_brightness(uint8_t level) {
-    digitalWrite(LCD_BL, level_to_on(level) ? HIGH : LOW);
+    ledcWrite(LCD_BL, level);
 }
 
 void display_hal_fill_screen(uint16_t color) {
