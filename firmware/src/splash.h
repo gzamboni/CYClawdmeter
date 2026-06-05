@@ -24,6 +24,13 @@ void splash_pick_for_current_rate(void);
 // True when splash is currently rendering (used to gate re-picks).
 bool splash_is_active(void);
 
+// True if the current frame or animation changed since the last call (clears on read).
+// ui.cpp uses this to re-render the mini logo canvas only when needed.
+bool splash_mini_dirty(void);
+
+// Milliseconds timestamp of the last animation pick (for usage-screen rotation pacing).
+uint32_t splash_last_pick_ms(void);
+
 // Root container (so ui.cpp can attach a click event).
 lv_obj_t* splash_get_root(void);
 
