@@ -1,0 +1,68 @@
+name-template: "v$RESOLVED_VERSION"
+tag-template: "v$RESOLVED_VERSION"
+
+categories:
+  - title: "Breaking Changes"
+    labels:
+      - breaking
+  - title: "Features"
+    labels:
+      - feature
+      - enhancement
+  - title: "Bug Fixes"
+    labels:
+      - fix
+      - bug
+  - title: "Firmware / Hardware"
+    labels:
+      - firmware
+      - hardware
+  - title: "Maintenance"
+    labels:
+      - chore
+      - ci
+      - build
+      - refactor
+      - test
+
+version-resolver:
+  major:
+    labels:
+      - breaking
+  minor:
+    labels:
+      - feature
+      - enhancement
+  patch:
+    labels:
+      - fix
+      - bug
+      - firmware
+      - hardware
+  default: patch
+
+autolabeler:
+  - label: breaking
+    title:
+      - "/^(feat|fix|refactor|perf)!:/i"
+      - "/BREAKING CHANGE/i"
+  - label: feature
+    title:
+      - "/^feat(\\(.+\\))?:/i"
+  - label: fix
+    title:
+      - "/^fix(\\(.+\\))?:/i"
+      - "/^perf(\\(.+\\))?:/i"
+  - label: firmware
+    title:
+      - "/^(boards|hal|ble|idle|splash|ui|display|touch|input|power|imu)(\\(.+\\))?:/i"
+  - label: chore
+    title:
+      - "/^(chore|ci|build|test|docs|refactor|style)(\\(.+\\))?:/i"
+
+template: |
+  ## What's Changed
+
+  $CHANGES
+
+  **Full Changelog**: $PREVIOUS_TAG...v$RESOLVED_VERSION
