@@ -1,27 +1,19 @@
 #!/bin/bash
-# Build and flash Clawdmeter firmware on Linux.
+# Build and flash Clawdmeter firmware on Linux (CYD / ESP32-2432S028R).
 # Usage:
-#   ./flash.sh <board>                  # default port /dev/ttyACM0
-#   ./flash.sh <board> /dev/ttyACM1     # explicit USB serial port
+#   ./flash.sh                  # default port /dev/ttyUSB0
+#   ./flash.sh /dev/ttyUSB1     # explicit USB serial port
 #
-# <board> is the PlatformIO env name, e.g. waveshare_amoled_216 or waveshare_amoled_18.
+# CYD uses CH340 USB-serial. Enter flash mode: hold BOOT, press+release RST, release BOOT.
 set -e
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
-BOARD="$1"
-PORT="${2:-/dev/ttyACM0}"
+BOARD="esp32_2432s028r"
+PORT="${1:-/dev/ttyUSB0}"
 
-if [ -z "$BOARD" ]; then
-    echo "Error: board env name is required."
-    echo "Usage: $0 <board> [port]"
-    echo "Available boards:"
-    grep -E '^\[env:' "$SCRIPT_DIR/firmware/platformio.ini" | sed 's/\[env:/  /;s/\]//'
-    exit 1
-fi
-
-echo "=== Flashing Clawdmeter ==="
-echo "Board: $BOARD"
-echo "Port:  $PORT"
+echo "=== Flashing Clawdmeter (CYD) ==="
+echo "Port: $PORT"
+echo "Hold BOOT, press+release RST, release BOOT to enter flash mode."
 echo ""
 
 cd "$SCRIPT_DIR/firmware"

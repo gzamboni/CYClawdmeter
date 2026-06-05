@@ -1,28 +1,20 @@
 #!/bin/bash
-# Build and flash Clawdmeter firmware on macOS.
+# Build and flash Clawdmeter firmware on macOS (CYD / ESP32-2432S028R).
 # Usage:
-#   ./flash-mac.sh <board>                       # auto-detect /dev/cu.usbmodem*
-#   ./flash-mac.sh <board> /dev/cu.usbmodem1101  # explicit USB serial port
+#   ./flash-mac.sh                          # auto-detect /dev/cu.wchusbserial*
+#   ./flash-mac.sh /dev/cu.wchusbserial14210  # explicit USB serial port
 #
-# <board> is the PlatformIO env name, e.g. waveshare_amoled_216 or waveshare_amoled_18.
+# CYD uses CH340 USB-serial. Enter flash mode: hold BOOT, press+release RST, release BOOT.
 set -e
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
-BOARD="$1"
-PORT="$2"
-
-if [ -z "$BOARD" ]; then
-    echo "Error: board env name is required."
-    echo "Usage: $0 <board> [port]"
-    echo "Available boards:"
-    grep -E '^\[env:' "$SCRIPT_DIR/firmware/platformio.ini" | sed 's/\[env:/  /;s/\]//'
-    exit 1
-fi
+BOARD="esp32_2432s028r"
+PORT="$1"
 
 if [ -z "$PORT" ]; then
-    PORT=$(ls /dev/cu.usbmodem* 2>/dev/null | head -1)
+    PORT=$(ls /dev/cu.wchusbserial* 2>/dev/null | head -1)
     if [ -z "$PORT" ]; then
-        echo "Error: no /dev/cu.usbmodem* device found. Plug in via USB-C."
+        echo "Error: no /dev/cu.wchusbserial* device found. Plug in via USB."
         exit 1
     fi
 fi
@@ -33,9 +25,9 @@ if ! command -v pio >/dev/null; then
     exit 1
 fi
 
-echo "=== Flashing Clawdmeter ==="
-echo "Board: $BOARD"
-echo "Port:  $PORT"
+echo "=== Flashing Clawdmeter (CYD) ==="
+echo "Port: $PORT"
+echo "Hold BOOT, press+release RST, release BOOT to enter flash mode."
 echo ""
 
 cd "$SCRIPT_DIR/firmware"

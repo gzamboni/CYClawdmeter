@@ -2,9 +2,7 @@
 
 A small ESP32 dashboard I made for my desk to keep an eye on Claude Code usage.
 
-It runs on a [Waveshare ESP32-S3-Touch-AMOLED-2.16](https://www.waveshare.com/esp32-s3-touch-amoled-2.16.htm?&aff_id=149786) as well as a few other alternative boards and pairs over Bluetooth, the splash screen plays pixel-art Clawd animations that get
-busier when your usage rate climbs. The two side buttons send Space and
-Shift+Tab over BLE HID for Claude Code's voice mode and mode-toggle shortcuts.
+It runs on the **ESP32-2432S028R "Cheap Yellow Display" (CYD)** — a 2.8" 320×240 ILI9341 TFT widely available on AliExpress/Amazon for ~$10 — and pairs over Bluetooth. The splash screen plays pixel-art Clawd animations that get busier when your usage rate climbs. The BOOT button sends Space over BLE HID for Claude Code's voice-mode push-to-talk.
 
 |              Usage meter              |              Clawd animation screen              |
 | :-----------------------------------: | :----------------------------------------------: |
@@ -21,20 +19,15 @@ The device boots into the splash. Tap the screen anywhere to switch to the Usage
 | ![Splash](screenshots/splash.png) | ![Usage](screenshots/usage.png) |
 |   Splash; touch-toggle anytime    | Session and weekly utilization  |
 
-While the splash is up, the middle (PWR) button cycles animations. **Hold the power button for 3 seconds, then release, to put the device into pairing mode** — this clears the saved Bluetooth bond and re-advertises. The firmware also auto-rotates animations every 20 s within the current usage-rate group, so a long stretch on the splash isn't just one Clawd on loop.
+The firmware also auto-rotates animations every 20 s within the current usage-rate group, so a long stretch on the splash isn't just one Clawd on loop. The display fades to black after 30 minutes of inactivity and wakes on any button press, touch, **or when new token-usage data arrives over BLE that differs from the last seen values**.
 
 ## Hardware
 
-Boards supported out of the box:
+**Target board: ESP32-2432S028R "Cheap Yellow Display" (CYD)** — 2.8" 320×240 ILI9341 TFT, widely available on AliExpress/Amazon for ~$10. Build env: `esp32_2432s028r`.
 
-- [Waveshare ESP32-S3-Touch-AMOLED-2.16](https://www.waveshare.com/esp32-s3-touch-amoled-2.16.htm?&aff_id=149786)
-- [Waveshare ESP32-C6-Touch-AMOLED-2.16](https://www.waveshare.com/esp32-c6-touch-amoled-2.16.htm?&aff_id=149786) 
-- [Waveshare ESP32-S3-Touch-AMOLED-1.8](https://www.waveshare.com/esp32-s3-touch-amoled-1.8.htm?&aff_id=149786)
-- **ESP32-2432S028R "Cheap Yellow Display" (CYD)** — 2.8" 320×240 ILI9341 TFT, widely available on AliExpress/Amazon for ~$10. Build env: `esp32_2432s028r`.
+The firmware is a thin HAL with per-board folders under `firmware/src/boards/`. The repo currently ships only the CYD port, but the abstraction layer (`firmware/src/hal/`) and a port skeleton (`firmware/src/boards/template/`) are kept in tree for future board additions. See [`docs/porting/adding-a-board.md`](docs/porting/adding-a-board.md) for the walk-through and [`docs/porting/hal-contract.md`](docs/porting/hal-contract.md) for the interfaces a port must implement.
 
-> Please check if a pull request exists for your alternative hardware port before opening a new one, providing QA feedback and testing on the same hardware is more valuable than duplicate pull requests.
-
-**Porting to another board:** the firmware is a thin HAL with per-board folders under `firmware/src/boards/`. Drop in a new folder and a new PlatformIO env — `main.cpp`, `ui.cpp`, and `splash.cpp` never need to change. See [`docs/porting/adding-a-board.md`](docs/porting/adding-a-board.md) for the walk-through and [`docs/porting/hal-contract.md`](docs/porting/hal-contract.md) for the interfaces a port must implement.
+> Please check if a pull request exists for your alternative hardware port before opening a new one — providing QA feedback and testing on the same hardware is more valuable than duplicate pull requests.
 
 ## Prerequisites
 
@@ -51,12 +44,9 @@ The macOS host pieces — Python daemon, LaunchAgent, and flash helper — were 
 ### Flash the firmware
 
 ```bash
-./flash-mac.sh waveshare_amoled_216                        # auto-detects /dev/cu.usbmodem*
-./flash-mac.sh waveshare_amoled_18  /dev/cu.usbmodem1101   # or pass an explicit USB serial port
-./flash-mac.sh esp32_2432s028r      /dev/cu.wchusbserial14210  # CYD: CH340 port, not usbmodem
+./flash-mac.sh                              # auto-detects /dev/cu.wchusbserial*
+./flash-mac.sh /dev/cu.wchusbserial14210    # or pass an explicit USB serial port
 ```
-
-The board env name is required. Run `./flash-mac.sh` with no args to see the available envs (scraped from `firmware/platformio.ini`).
 
 > **CYD flash note:** The CYD uses a CH340 USB-serial chip instead of native USB-JTAG. To enter flash mode, hold the BOOT button, press and release RESET, then release BOOT. The port shows up as `/dev/cu.wchusbserial*` on macOS.
 
@@ -88,12 +78,9 @@ launchctl load -w ~/Library/LaunchAgents/com.user.claude-usage-daemon.plist # st
 ### Flash the firmware
 
 ```bash
-./flash.sh waveshare_amoled_216                  # defaults to /dev/ttyACM0
-./flash.sh waveshare_amoled_18  /dev/ttyACM1     # or pass an explicit USB serial port
-./flash.sh esp32_2432s028r      /dev/ttyUSB0     # CYD: CH340 port, not ttyACM
+./flash.sh                  # defaults to /dev/ttyUSB0
+./flash.sh /dev/ttyUSB1     # or pass an explicit USB serial port
 ```
-
-The board env name is required. Run `./flash.sh` with no args to see the available envs (scraped from `firmware/platformio.ini`).
 
 > **CYD flash note:** The CYD uses a CH340 USB-serial chip. To enter flash mode, hold BOOT, press and release RESET, then release BOOT. The port shows up as `/dev/ttyUSB0` on Linux.
 
@@ -110,7 +97,7 @@ bluetoothctl pair F4:12:FA:C0:8F:E5    # use your device's MAC
 bluetoothctl trust F4:12:FA:C0:8F:E5
 ```
 
-To re-pair later, hold the power button for 3 seconds then release — the device clears its saved bond and re-advertises.
+To re-pair later, use the on-screen hamburger menu → Pair Mode — the device clears its saved bond and re-advertises.
 
 ### Install the daemon
 
@@ -133,29 +120,10 @@ View logs: `journalctl --user -u claude-usage-daemon -f`
 4. The daemon connects to the ESP32 over BLE and writes a JSON payload to the GATT RX characteristic.
 5. The firmware parses it and updates the LVGL dashboard.
 6. The firmware also tracks the rate of change of session % over a 5-minute window and picks splash animations from the matching mood group.
-7. The two side buttons are independent of all of this — they send Space and Shift+Tab as BLE HID keyboard input to the paired host directly.
+7. The BOOT button sends Space as BLE HID keyboard input to the paired host directly.
+8. The display sleeps after 30 minutes of inactivity and wakes on any touch, BOOT press, or BLE-delivered usage value that changes from the last seen value.
 
-## Physical buttons
-
-Button layout varies by board. All boards send HID keys over BLE; the available inputs differ.
-
-### Waveshare AMOLED-2.16 (three buttons)
-
-| Button           | GPIO         | Function                                                      |
-| ---------------- | ------------ | ------------------------------------------------------------- |
-| **Left**         | GPIO 0       | Hold to send Space (Claude Code voice-mode push-to-talk)      |
-| **Middle** (PWR) | AXP2101 PKEY | On splash: cycle animations. Hold 3s + release: pairing mode  |
-| **Right**        | GPIO 18      | Press to send Shift+Tab (Claude Code mode toggle)             |
-
-### Waveshare AMOLED-1.8 (two buttons + touch)
-
-| Button           | GPIO         | Function                                                      |
-| ---------------- | ------------ | ------------------------------------------------------------- |
-| **BOOT**         | GPIO 0       | Hold to send Space (Claude Code voice-mode push-to-talk)      |
-| **PWR**          | XCA9554 EXIO4| On splash: cycle animations. Hold 3s + release: pairing mode  |
-| **Touch**        | —            | Tap anywhere: toggle splash / usage screen                    |
-
-### CYD — ESP32-2432S028R (one button + resistive touch)
+## Physical inputs
 
 | Input              | GPIO / Source    | Function                                                  |
 | ------------------ | ---------------- | --------------------------------------------------------- |
@@ -163,7 +131,7 @@ Button layout varies by board. All boards send HID keys over BLE; the available 
 | **Touch**          | XPT2046          | Tap anywhere: toggle splash / usage screen                |
 | **Hamburger menu** | top-right corner | On usage screen: Brightness / Pair Mode                   |
 
-Space and Shift+Tab go out as standard BLE HID keyboard reports, so they trigger in whatever window has focus on the paired host — not just Claude Code. (CYD only sends Space; Shift+Tab requires a second physical button not present on that board.)
+Space goes out as a standard BLE HID keyboard report, so it triggers in whatever window has focus on the paired host — not just Claude Code. (The CYD has no secondary button, so the Shift+Tab mode-toggle shortcut available on multi-button boards is not bound here.)
 
 ## BLE protocol
 
