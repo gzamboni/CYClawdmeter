@@ -1,0 +1,111 @@
+name: Firmware
+
+on:
+  release:
+    types:
+      - published
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    name: Build release firmware
+    runs-on: ubuntu-latest
+
+    defaults:
+      run:
+        working-directory: firmware
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Cache PlatformIO packages
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.platformio/.cache
+            ~/.platformio/packages
+            ~/.platformio/platforms
+          key: platformio-${{ runner.os }}-${{ hashFiles('firmware/platformio.ini') }}
+          restore-keys: |
+            platformio-${{ runner.os }}-
+
+      - name: Install PlatformIO
+        run: python -m pip install --upgrade platformio
+
+      - name: Run unit tests
+        run: pio test -e native
+
+      - name: Build firmware environments
+        run: |
+          mkdir -p dist
+          python - <<'PY' > /tmp/pio_firmware_envs.txt
+          import configparser
+
+          config = configparser.ConfigParser()
+          config.read("platformio.ini")
+          for section in config.sections():
+              if not section.startswith("env:"):
+                  continue
+              env = section.split(":", 1)[1]
+              if env == "native":
+                  continue
+              print(env)
+          PY
+
+          if [ ! -s /tmp/pio_firmware_envs.txt ]; then
+            echo "No firmware environments found in platformio.ini" >&2
+            exit 1
+          fi
+
+          while read -r env; do
+            echo "Building PlatformIO environment: $env"
+            pio run -e "$env"
+
+            build_dir=".pio/build/$env"
+            prefix="cyclawdmeter-$env"
+
+            cp "$build_dir/firmware.factory.bin" "dist/$prefix-factory.bin"
+            cp "$build_dir/firmware.bin" "dist/$prefix-firmware.bin"
+            cp "$build_dir/bootloader.bin" "dist/$prefix-bootloader.bin"
+            cp "$build_dir/partitions.bin" "dist/$prefix-partitions.bin"
+          done < /tmp/pio_firmware_envs.txt
+
+          cat > dist/FLASHING.txt <<'EOF'
+          CYClawdmeter CYD firmware
+          =========================
+
+          Recommended single-file flash:
+
+            esptool.py --chip esp32 --baud 460800 --port <PORT> write_flash 0x0 cyclawdmeter-<env>-factory.bin
+
+          Replace <env> with the PlatformIO environment name, e.g. esp32_2432s028r.
+
+          Replace <PORT> with your CYD serial port, for example:
+
+            macOS: /dev/cu.wchusbserial14210
+            Linux: /dev/ttyUSB0
+
+          Enter flash mode first: hold BOOT, press and release RESET, then release BOOT.
+          EOF
+
+      - name: Upload firmware artifact
+        if: ${{ !env.ACT }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: cyclawdmeter-firmware
+          path: firmware/dist/*
+          if-no-files-found: error
+
+      - name: Attach firmware to release
+        if: ${{ !env.ACT }}
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh release upload "${{ github.event.release.tag_name }}" dist/* --clobber

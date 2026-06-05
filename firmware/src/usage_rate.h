@@ -7,6 +7,10 @@
 // Feed in the latest session percentage every time fresh BLE data arrives.
 void usage_rate_sample(float session_pct);
 
+// Clear the smoothing window. Mostly useful for tests; also mirrors the reset
+// behavior used internally when a session counter rolls over.
+void usage_rate_reset(void);
+
 // 0 = idle, 1 = normal, 2 = active, 3 = heavy.
 // Defaults to 0 when the buffer doesn't have enough samples yet.
 int usage_rate_group(void);

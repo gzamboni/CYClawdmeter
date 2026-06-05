@@ -20,7 +20,7 @@ The device boots into the splash. Tap the screen anywhere to switch to the Usage
 
 |              Splash               |              Usage              |              Menu              |
 | :-------------------------------: | :-----------------------------: | :----------------------------: |
-| ![Splash](screenshots/splash.png) | ![Usage](screenshots/usage.png) | ![Menu](screenshots/menu.png) |
+| ![Splash](screenshots/splash.png) | ![Usage](screenshots/usage.png) | ![Menu](screenshots/menu.png)  |
 |   Splash; touch-toggle anytime    | Session and weekly utilization  | Brightness and pairing sidebar |
 
 The firmware also auto-rotates animations every 20 s within the current usage-rate group, so a long stretch on the splash isn't just one Clawd on loop. The display fades to black after 30 minutes of inactivity and wakes on any button press, touch, **or when new token-usage data arrives over BLE that differs from the last seen values**.
@@ -40,6 +40,35 @@ The firmware is a thin HAL with per-board folders under `firmware/src/boards/`. 
 - Linux: `curl`, `bluetoothctl`, `busctl` (BlueZ Bluetooth stack)
 - macOS: `python3` (the installer sets up a venv with `bleak` and `httpx`)
 - Claude Code with an active subscription
+
+## Prebuilt firmware
+
+When a GitHub release is published, the **Firmware** GitHub Action builds one ROM for each non-test PlatformIO environment and attaches the generated files to that release. The asset names include the PlatformIO environment, for example `esp32_2432s028r`. Download the release assets to get:
+
+- `cyclawdmeter-<env>-factory.bin` — recommended single-file image for flashing a blank or existing board.
+- `cyclawdmeter-<env>-firmware.bin` — app-only firmware image.
+- `cyclawdmeter-<env>-bootloader.bin` and `cyclawdmeter-<env>-partitions.bin` — split images for advanced/manual flashing.
+- `FLASHING.txt` — quick command reference.
+
+To flash the factory image:
+
+```bash
+python -m pip install esptool
+esptool.py --chip esp32 --baud 460800 --port /dev/cu.wchusbserial14210 write_flash 0x0 cyclawdmeter-esp32_2432s028r-factory.bin
+```
+
+Use `/dev/ttyUSB0` or your actual serial port on Linux. The CYD still needs flash mode first: hold BOOT, press and release RESET, then release BOOT.
+
+## Unit tests
+
+The firmware has a native PlatformIO test environment for hardware-independent logic. Run it from the firmware directory:
+
+```bash
+cd firmware
+pio test -e native
+```
+
+The release firmware workflow runs these tests before building the release binaries.
 
 ## macOS installation
 

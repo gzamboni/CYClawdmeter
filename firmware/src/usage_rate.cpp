@@ -1,5 +1,10 @@
 #include "usage_rate.h"
+#ifdef UNIT_TEST
+#include <stdint.h>
+extern uint32_t millis(void);
+#else
 #include <Arduino.h>
+#endif
 
 // Thresholds in %/min. A 5-hour (300 min) session ÷ 100% = 0.33 %/min to fill
 // exactly at the same pace as the session itself resets — the user wants the
@@ -33,7 +38,7 @@ static inline uint8_t oldest_idx(void) {
     return (head + RING_SIZE - count) % RING_SIZE;
 }
 
-static void usage_rate_reset(void) {
+void usage_rate_reset(void) {
     count = 0;
     head  = 0;
 }
