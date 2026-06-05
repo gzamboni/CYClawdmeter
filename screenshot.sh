@@ -6,7 +6,7 @@
 OUTPUT="${1:-screenshot.png}"
 if [ -z "$2" ]; then
     case "$(uname -s)" in
-        Darwin) PORT="/dev/cu.usbmodem101" ;;
+        Darwin) PORT="/dev/cu.usbserial-110" ;;
         *)      PORT="/dev/ttyACM0" ;;
     esac
 else
@@ -28,26 +28,51 @@ trap "rm -f '$TMPRAW' '$TMPDIMS'" EXIT
 echo "Taking screenshot from $PORT..."
 
 "$PY" - "$PORT" "$TMPRAW" "$TMPDIMS" << 'PYEOF'
-import serial, sys
+import serial, sys, time
 
 port_path, raw_path, dims_path = sys.argv[1], sys.argv[2], sys.argv[3]
 
-port = serial.Serial(port_path, 115200, timeout=10)
+port = serial.Serial(port_path, 115200, timeout=0.25)
+
+# Opening the ESP32 serial port can reset the board. Give the firmware a short
+# window to boot so the screenshot command is not sent into the bootloader.
+boot_deadline = time.monotonic() + 6
+while time.monotonic() < boot_deadline:
+    line = port.readline().decode("utf-8", errors="replace").strip()
+    if line:
+        print(f"Device: {line}", file=sys.stderr)
+        if '"ready":true' in line:
+            break
+
 port.reset_input_buffer()
 port.write(b"screenshot\n")
 port.flush()
 
+deadline = time.monotonic() + 15
 while True:
     line = port.readline().decode("utf-8", errors="replace").strip()
+    if not line:
+        if time.monotonic() >= deadline:
+            print("Timeout: device did not send SCREENSHOT_START", file=sys.stderr)
+            sys.exit(1)
+        continue
     if line.startswith("SCREENSHOT_START"):
         parts = line.split()
+        if len(parts) != 4:
+            print(f"Malformed screenshot header: {line}", file=sys.stderr)
+            sys.exit(1)
         w, h, raw_size = int(parts[1]), int(parts[2]), int(parts[3])
         break
-    if line == "SCREENSHOT_ERR":
-        print("Device reported screenshot error", file=sys.stderr)
+    if line.startswith("SCREENSHOT_ERR"):
+        print(f"Device reported screenshot error: {line}", file=sys.stderr)
         sys.exit(1)
+    if line == "SCREENSHOT_UNSUPPORTED":
+        print("Device does not support screenshots in this firmware/board build", file=sys.stderr)
+        sys.exit(1)
+    print(f"Device: {line}", file=sys.stderr)
 
 data = b""
+port.timeout = 10
 while len(data) < raw_size:
     chunk = port.read(min(4096, raw_size - len(data)))
     if not chunk:
@@ -76,7 +101,7 @@ fi
 
 DIMS=$(cat "$TMPDIMS")
 ffmpeg -y -f rawvideo -pixel_format rgb565le -video_size "$DIMS" \
-    -i "$TMPRAW" -update 1 -frames:v 1 "$OUTPUT" 2>/dev/null || true
+    -i "$TMPRAW" -update 1 -frames:v 1 "$OUTPUT"
 
 
 if [ -f "$OUTPUT" ]; then

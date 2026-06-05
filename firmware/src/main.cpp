@@ -1,6 +1,9 @@
 #include <Arduino.h>
 #include <Wire.h>
 #include <lvgl.h>
+#include <core/lv_refr_private.h>
+#include <display/lv_display_private.h>
+#include <draw/lv_draw_private.h>
 #include <ArduinoJson.h>
 #include <esp_heap_caps.h>
 
@@ -120,42 +123,102 @@ static bool parse_json(const char* json, UsageData* out) {
 static char cmd_buf[CMD_BUF_SIZE];
 static int cmd_pos = 0;
 
+static lv_result_t render_screenshot_area(lv_obj_t* obj, lv_draw_buf_t* draw_buf, const lv_area_t* area) {
+    lv_obj_t* top_obj = lv_refr_get_top_obj(area, obj);
+    if (top_obj == NULL) {
+        lv_draw_buf_clear(draw_buf, NULL);
+        top_obj = obj;
+    }
+
+    lv_layer_t layer;
+    lv_layer_init(&layer);
+    layer.draw_buf = draw_buf;
+    layer.buf_area = *area;
+    layer.color_format = LV_COLOR_FORMAT_RGB565;
+    layer._clip_area = *area;
+    layer.phy_clip_area = *area;
+
+    lv_draw_unit_send_event(NULL, LV_EVENT_CHILD_CREATED, &layer);
+
+    lv_display_t* disp_old = lv_refr_get_disp_refreshing();
+    lv_display_t* disp_new = lv_obj_get_display(obj);
+    lv_layer_t* layer_old = disp_new->layer_head;
+    disp_new->layer_head = &layer;
+
+    lv_refr_set_disp_refreshing(disp_new);
+
+    if (top_obj == obj) {
+        lv_obj_redraw(&layer, top_obj);
+    } else {
+        lv_obj_refr(&layer, top_obj);
+    }
+
+    layer.all_tasks_added = true;
+    while (layer.draw_task_head) {
+        lv_draw_dispatch_wait_for_request();
+        lv_draw_dispatch();
+    }
+
+    disp_new->layer_head = layer_old;
+    lv_refr_set_disp_refreshing(disp_old);
+
+    lv_draw_unit_send_event(NULL, LV_EVENT_SCREEN_LOAD_START, &layer);
+    lv_draw_unit_send_event(NULL, LV_EVENT_CHILD_DELETED, &layer);
+    return LV_RESULT_OK;
+}
+
 static void send_screenshot() {
-#ifndef BOARD_HAS_PSRAM
-    // A full RGB565 framebuffer doesn't fit in internal SRAM on PSRAM-free
-    // boards (e.g. 480×480×2 = 460 KB). Capture is unsupported there.
-    Serial.println("SCREENSHOT_UNSUPPORTED");
-    return;
-#else
     const uint32_t w = board_caps().width;
     const uint32_t h = board_caps().height;
     const uint32_t row_bytes = w * 2;
     const uint32_t buf_size = row_bytes * h;
-    uint8_t* sbuf = (uint8_t*)heap_caps_malloc(buf_size, MALLOC_CAP_SPIRAM);
+    const uint32_t tile_rows = 4;
+    const uint32_t tile_size = row_bytes * tile_rows;
+#ifdef BOARD_HAS_PSRAM
+    const uint32_t screenshot_caps = MALLOC_CAP_SPIRAM;
+#else
+    const uint32_t screenshot_caps = MALLOC_CAP_INTERNAL | MALLOC_CAP_8BIT;
+#endif
+    uint8_t* sbuf = (uint8_t*)heap_caps_malloc(tile_size, screenshot_caps);
     if (!sbuf) {
-        Serial.println("SCREENSHOT_ERR");
+        Serial.printf("SCREENSHOT_ERR alloc size=%lu free=%lu largest=%lu\n",
+            (unsigned long)tile_size,
+            (unsigned long)heap_caps_get_free_size(screenshot_caps),
+            (unsigned long)heap_caps_get_largest_free_block(screenshot_caps));
         return;
     }
 
     lv_draw_buf_t draw_buf;
-    lv_draw_buf_init(&draw_buf, w, h, LV_COLOR_FORMAT_RGB565, row_bytes, sbuf, buf_size);
-
-    lv_result_t res = lv_snapshot_take_to_draw_buf(lv_screen_active(), LV_COLOR_FORMAT_RGB565, &draw_buf);
-    if (res != LV_RESULT_OK) {
-        heap_caps_free(sbuf);
-        Serial.println("SCREENSHOT_ERR");
-        return;
-    }
-
     Serial.printf("SCREENSHOT_START %lu %lu %lu\n",
         (unsigned long)w, (unsigned long)h, (unsigned long)buf_size);
     Serial.flush();
-    Serial.write(sbuf, buf_size);
-    Serial.flush();
+
+    for (uint32_t y = 0; y < h; y += tile_rows) {
+        const uint32_t rows = (y + tile_rows <= h) ? tile_rows : (h - y);
+        const uint32_t bytes = row_bytes * rows;
+        lv_draw_buf_init(&draw_buf, w, rows, LV_COLOR_FORMAT_RGB565, row_bytes, sbuf, bytes);
+
+        lv_area_t area;
+        area.x1 = 0;
+        area.x2 = w - 1;
+        area.y1 = y;
+        area.y2 = y + rows - 1;
+
+        lv_result_t res = render_screenshot_area(lv_screen_active(), &draw_buf, &area);
+        if (res != LV_RESULT_OK) {
+            heap_caps_free(sbuf);
+            Serial.println();
+            Serial.println("SCREENSHOT_ERR render");
+            return;
+        }
+
+        Serial.write(sbuf, bytes);
+        Serial.flush();
+    }
+
     Serial.println();
     Serial.println("SCREENSHOT_END");
     heap_caps_free(sbuf);
-#endif
 }
 
 static void check_serial_cmd() {
