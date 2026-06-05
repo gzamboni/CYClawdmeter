@@ -725,8 +725,13 @@ void ui_update(const UsageData* data) {
 void ui_tick_anim(void) {
     if (current_screen != SCREEN_USAGE) return;
 
-    // Keep the mini logo canvas in sync with whichever frame splash_tick advanced.
-    if (logo_canvas) {
+    // Auto-rotate animation on the usage screen, mirroring the splash screen behaviour.
+    if (millis() - splash_last_pick_ms() >= 20000) {
+        splash_pick_for_current_rate();
+    }
+
+    // Re-render mini logo canvas only when the frame or animation changed.
+    if (logo_canvas && splash_mini_dirty()) {
         splash_render_small(logo_canvas_buf, LOGO_MINI_CELL);
         lv_obj_invalidate(logo_canvas);
     }

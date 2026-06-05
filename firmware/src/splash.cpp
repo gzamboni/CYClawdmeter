@@ -30,6 +30,7 @@ static uint16_t cur_frame = 0;
 static uint32_t frame_started_ms = 0;
 static uint32_t last_pick_ms = 0;
 static bool active = false;
+static bool mini_dirty = false;
 
 // While splash is showing, auto-cycle to the next animation in the current
 // rate-driven group every this many ms.
@@ -138,7 +139,7 @@ void splash_init(lv_obj_t *parent) {
 
     canvas = lv_canvas_create(splash_container);
     lv_canvas_set_buffer(canvas, canvas_buf, canvas_w, canvas_h, LV_COLOR_FORMAT_RGB565);
-    lv_obj_center(canvas);
+    lv_obj_set_pos(canvas, (c.width - canvas_w) / 2, (c.height - canvas_h) / 2);
 
     // Placeholder label (visible only when no animations are loaded)
     label_status = lv_label_create(splash_container);
@@ -180,7 +181,7 @@ void splash_tick(void) {
     if (millis() - frame_started_ms >= hold) {
         cur_frame = (cur_frame + 1) % a->frame_count;
         frame_started_ms = millis();
-        // Only blit to the full-screen canvas when splash is visible.
+        mini_dirty = true;
         if (active) render_frame(a->frames[cur_frame], a->palette);
     }
 }
@@ -234,11 +235,20 @@ void splash_pick_for_current_rate(void) {
     cur_frame = 0;
     frame_started_ms = millis();
     last_pick_ms = frame_started_ms;
+    mini_dirty = true;
     const splash_anim_def_t *a = &splash_anims[cur_anim];
     render_frame(a->frames[0], a->palette);
 }
 
 bool splash_is_active(void) { return active; }
+
+bool splash_mini_dirty(void) {
+    bool d = mini_dirty;
+    mini_dirty = false;
+    return d;
+}
+
+uint32_t splash_last_pick_ms(void) { return last_pick_ms; }
 
 void splash_show(void) {
     splash_pick_for_current_rate();
