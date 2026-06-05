@@ -1,5 +1,5 @@
 #!/bin/bash
-# Build and flash Clawdmeter firmware on Linux (CYD / ESP32-2432S028R).
+# Build and flash CYClawdmeter firmware on Linux (CYD / ESP32-2432S028R).
 # Usage:
 #   ./flash.sh                  # default port /dev/ttyUSB0
 #   ./flash.sh /dev/ttyUSB1     # explicit USB serial port
@@ -11,7 +11,7 @@ SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 BOARD="esp32_2432s028r"
 PORT="${1:-/dev/ttyUSB0}"
 
-echo "=== Flashing Clawdmeter (CYD) ==="
+echo "=== Flashing CYClawdmeter (CYD) ==="
 echo "Port: $PORT"
 echo "Hold BOOT, press+release RST, release BOOT to enter flash mode."
 echo ""

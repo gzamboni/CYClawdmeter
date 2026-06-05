@@ -1,5 +1,5 @@
 #!/bin/bash
-# Build and flash Clawdmeter firmware on macOS (CYD / ESP32-2432S028R).
+# Build and flash CYClawdmeter firmware on macOS (CYD / ESP32-2432S028R).
 # Usage:
 #   ./flash-mac.sh                          # auto-detect /dev/cu.wchusbserial*
 #   ./flash-mac.sh /dev/cu.wchusbserial14210  # explicit USB serial port
@@ -25,7 +25,7 @@ if ! command -v pio >/dev/null; then
     exit 1
 fi
 
-echo "=== Flashing Clawdmeter (CYD) ==="
+echo "=== Flashing CYClawdmeter (CYD) ==="
 echo "Port: $PORT"
 echo "Hold BOOT, press+release RST, release BOOT to enter flash mode."
 echo ""

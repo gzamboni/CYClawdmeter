@@ -1,5 +1,5 @@
 #!/bin/bash
-# macOS installer for Clawdmeter daemon (Python + bleak + launchd).
+# macOS installer for CYClawdmeter daemon (Python + bleak + launchd).
 # Mirrors install.sh but uses LaunchAgents instead of systemd user units.
 set -e
 
@@ -13,7 +13,7 @@ LOG_DIR="$HOME/Library/Logs"
 LOG_OUT="$LOG_DIR/claude-usage-daemon.out.log"
 LOG_ERR="$LOG_DIR/claude-usage-daemon.err.log"
 
-echo "=== Clawdmeter macOS install ==="
+echo "=== CYClawdmeter macOS install ==="
 echo ""
 
 echo "[1/5] Checking prerequisites..."
@@ -75,7 +75,7 @@ echo ""
 echo "First-time Bluetooth pairing (after firmware is flashed):"
 echo "  1. Power on the device."
 echo "  2. Open System Settings → Bluetooth."
-echo "  3. Click 'Connect' next to 'Clawdmeter'."
+echo "  3. Click 'Connect' next to 'CYClawdmeter'."
 echo "  4. The daemon will discover it within ~30 s and start polling."
 echo ""
 echo "Useful commands:"

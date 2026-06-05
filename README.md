@@ -1,8 +1,12 @@
-# Clawdmeter
+# CYClawdmeter
 
-A small ESP32 dashboard I made for my desk to keep an eye on Claude Code usage.
+Cheap Yellow Claude Meter: a small ESP32 dashboard I made for my desk to keep an eye on Claude Code usage.
 
 It runs on the **ESP32-2432S028R "Cheap Yellow Display" (CYD)** — a 2.8" 320×240 ILI9341 TFT widely available on AliExpress/Amazon for ~$10 — and pairs over Bluetooth. The splash screen plays pixel-art Clawd animations that get busier when your usage rate climbs. The BOOT button sends Space over BLE HID for Claude Code's voice-mode push-to-talk.
+
+This continues as a separate fork of the original project because CYD support required architectural changes rather than a small board-profile patch. The firmware was reshaped around a board HAL, CYD-specific display/touch/input constraints, a compact 320×240 layout, and PSRAM-free rendering paths, so keeping this fork focused on Cheap Yellow Display hardware makes the code easier to maintain and test.
+
+Huge thanks to the original [HermannBjorgvin/Clawdmeter](https://github.com/HermannBjorgvin/Clawdmeter) project for the idea, foundation, and playful Clawd-on-your-desk energy this fork builds on.
 
 |              Usage meter              |              Clawd animation screen              |
 | :-----------------------------------: | :----------------------------------------------: |
@@ -52,7 +56,7 @@ The macOS host pieces — Python daemon, LaunchAgent, and flash helper — were 
 
 ### Pair the device
 
-After flashing, open **System Settings → Bluetooth** and click *Connect* next to "Clawdmeter". The daemon will discover it on its next scan (~30 s).
+After flashing, open **System Settings → Bluetooth** and click *Connect* next to "CYClawdmeter". The daemon will discover it on its next scan (~30 s).
 
 ### Install the daemon
 
@@ -86,13 +90,13 @@ launchctl load -w ~/Library/LaunchAgents/com.user.claude-usage-daemon.plist # st
 
 ### Pair the device
 
-After flashing, the device advertises as "Clawdmeter". Pair it once:
+After flashing, the device advertises as "CYClawdmeter". Pair it once:
 
 ```bash
 # Scan for the device
 bluetoothctl scan le
 
-# When "Clawdmeter" appears, pair and trust it
+# When "CYClawdmeter" appears, pair and trust it
 bluetoothctl pair F4:12:FA:C0:8F:E5    # use your device's MAC
 bluetoothctl trust F4:12:FA:C0:8F:E5
 ```
@@ -122,6 +126,26 @@ View logs: `journalctl --user -u claude-usage-daemon -f`
 6. The firmware also tracks the rate of change of session % over a 5-minute window and picks splash animations from the matching mood group.
 7. The BOOT button sends Space as BLE HID keyboard input to the paired host directly.
 8. The display sleeps after 30 minutes of inactivity and wakes on any touch, BOOT press, or BLE-delivered usage value that changes from the last seen value.
+
+## Screenshots
+
+Screenshot capture is **experimental**. It is mainly a development aid for checking the CYD UI without photographing the physical screen.
+
+```bash
+./screenshot.sh screenshots/current.png /dev/cu.usbserial-110
+```
+
+The script opens the USB serial port, waits briefly because opening the port can reset the ESP32, sends the `screenshot` command, receives raw RGB565 pixels, and converts them to PNG with `ffmpeg`. If system Python does not have `pyserial`, it falls back to PlatformIO's bundled Python.
+
+On PSRAM-free CYD boards, a full 320×240 RGB565 framebuffer needs 153,600 bytes and usually cannot be allocated as one contiguous block. The firmware therefore renders the active LVGL screen in small horizontal strips and streams those strips over serial as one logical image:
+
+```text
+SCREENSHOT_START <width> <height> <raw_size>
+<raw RGB565 bytes>
+SCREENSHOT_END
+```
+
+This relies on LVGL internal/private rendering APIs and `LV_USE_SNAPSHOT=1`, so it may break when LVGL is upgraded. Treat it as a useful debug hook, not a stable device protocol. If capture fails, `screenshot.sh` prints the firmware error, including allocation details when available.
 
 ## Physical inputs
 
