@@ -1,5 +1,6 @@
 #include "ui.h"
 #include "splash.h"
+#include "idle.h"
 #include <lvgl.h>
 #include "logo.h"
 #include "icons.h"
@@ -631,6 +632,27 @@ void ui_init(void) {
 
 void ui_update(const UsageData* data) {
     if (!data->valid) return;
+
+    // Wake display when usage values change. Skip reset_mins (counts down
+    // every poll = constant wake) and the first valid sample (no baseline).
+    static bool last_valid = false;
+    static float last_session_pct = 0.0f;
+    static float last_weekly_pct = 0.0f;
+    static char last_status[sizeof(data->status)] = {0};
+    static bool last_ok = false;
+    if (last_valid) {
+        bool changed = (data->session_pct != last_session_pct)
+                    || (data->weekly_pct  != last_weekly_pct)
+                    || (data->ok          != last_ok)
+                    || (strncmp(data->status, last_status, sizeof(last_status)) != 0);
+        if (changed) idle_note_activity();
+    }
+    last_session_pct = data->session_pct;
+    last_weekly_pct  = data->weekly_pct;
+    last_ok          = data->ok;
+    strncpy(last_status, data->status, sizeof(last_status) - 1);
+    last_status[sizeof(last_status) - 1] = '\0';
+    last_valid = true;
 
     int s_pct = (int)(data->session_pct + 0.5f);
 
